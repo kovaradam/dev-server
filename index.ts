@@ -25,12 +25,12 @@ async function handleHttp(connection: Deno.Conn) {
 
 const INJECT_SCRIPT = "<script>console.log('world!')</script>";
 
-function createResponseStream(file: Deno.FsFile, injectHtml: string) {
+function createResponseStream(file: Deno.FsFile, htmlSlice: string) {
   const textEncoderStream = new TextEncoderStream();
   const textWriter = textEncoderStream.writable.getWriter();
 
   textWriter.ready
-    .then(() => textWriter.write(injectHtml))
+    .then(() => textWriter.write(htmlSlice))
     .then(() => textWriter.close());
 
   return mergeReadableStreams(textEncoderStream.readable, file.readable);
