@@ -1,11 +1,11 @@
-import { mergeReadableStreams } from "https://deno.land/std@0.126.0/streams/merge.ts";
-import { createArgumentMap, log } from "./utils.ts";
+import { mergeReadableStreams } from 'https://deno.land/std@0.126.0/streams/merge.ts';
+import { createArgumentMap, log } from './utils.ts';
 
 const args = createArgumentMap();
-const PORT = args["-p"] ?? 3000;
-const SUBDIRECTORY = args["-d"] ?? "";
+const PORT = args['-p'] ?? 3000;
+const SUBDIRECTORY = args['-d'] ?? '';
 
-if (args["-h"]) {
+if (args['-h']) {
   log.help();
   Deno.exit(0);
 }
@@ -19,7 +19,7 @@ const server = Deno.listen({ port: Number(PORT) });
   }
 })();
 
-const WORKING_DIRECTORY = new URL(".", import.meta.url).pathname;
+const WORKING_DIRECTORY = new URL('.', import.meta.url).pathname;
 
 const fsWatcherStore = {
   _isDirty: false,
@@ -52,7 +52,7 @@ async function handleHttp(connection: Deno.Conn) {
     const url = new URL(requestEvent.request.url);
     const filepath = decodeURIComponent(url.pathname);
 
-    if (filepath === "/poll") {
+    if (filepath === '/poll') {
       const status = [204, 205][+fsWatcherStore.getIsDirty()];
       await requestEvent.respondWith(new Response(null, { status }));
       continue;
@@ -62,19 +62,19 @@ async function handleHttp(connection: Deno.Conn) {
     try {
       file = await readFile(`.${filepath}`);
     } catch {
-      const notFoundResponse = new Response("404 Not Found", { status: 404 });
+      const notFoundResponse = new Response('404 Not Found', { status: 404 });
       await requestEvent.respondWith(notFoundResponse);
       return;
     }
 
     const response = new Response(
-      createFileResponseStream(file, INJECT_SCRIPT)
+      createFileResponseStream(file, INJECT_SCRIPT),
     );
     await requestEvent.respondWith(response);
   }
 }
 
-const INJECT_SCRIPT = Deno.readTextFileSync("./client-script.html");
+const INJECT_SCRIPT = Deno.readTextFileSync('./client-script.html');
 
 function createFileResponseStream(file: Deno.FsFile, htmlSlice: string) {
   const textEncoderStream = new TextEncoderStream();
@@ -91,7 +91,7 @@ async function readFile(filepath: string): Promise<Deno.FsFile> {
   const stat = await Deno.stat(filepath);
 
   if (stat.isDirectory) {
-    filepath += "/index.html";
+    filepath += '/index.html';
   }
 
   const file = await Deno.open(filepath, { read: true });
