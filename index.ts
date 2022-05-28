@@ -1,4 +1,25 @@
 import { mergeReadableStreams } from "https://deno.land/std@0.126.0/streams/merge.ts";
+import { createArgumentMap, log } from "./utils.ts";
+
+const args = createArgumentMap();
+const PORT = args["-p"] ?? 3000;
+const SUBDIRECTORY = args["-d"] ?? "";
+
+if (args["-h"]) {
+  log.help();
+  Deno.exit(0);
+}
+
+const server = Deno.listen({ port: Number(PORT) });
+
+(async () => {
+  log.info(`Running on port ${log.Colors.bold(String(PORT))}`);
+  for await (const conn of server) {
+    handleHttp(conn).catch(console.error);
+  }
+})();
+
+const WORKING_DIRECTORY = new URL(".", import.meta.url).pathname;
 
 const fsWatcherStore = {
   _isDirty: false,
@@ -13,9 +34,13 @@ const fsWatcherStore = {
 };
 
 (async () => {
-  const watcher = Deno.watchFs("./");
+  const directory = `${WORKING_DIRECTORY}${SUBDIRECTORY}`;
+  const watcher = Deno.watchFs(directory);
+
+  log.info(`Watching for file changes in ${log.Colors.bold(directory)}`);
+
   for await (const event of watcher) {
-    console.info(`${event.kind.toUpperCase()}: ${event.paths}`);
+    log.fsEvent(event);
     fsWatcherStore.update();
   }
 })();
@@ -33,12 +58,10 @@ async function handleHttp(connection: Deno.Conn) {
       continue;
     }
 
-    // Try opening the file
     let file;
     try {
       file = await readFile(`.${filepath}`);
     } catch {
-      // If the file cannot be opened, return a "404 Not Found" response
       const notFoundResponse = new Response("404 Not Found", { status: 404 });
       await requestEvent.respondWith(notFoundResponse);
       return;
@@ -68,18 +91,9 @@ async function readFile(filepath: string): Promise<Deno.FsFile> {
   const stat = await Deno.stat(filepath);
 
   if (stat.isDirectory) {
-    filepath += "index.html";
+    filepath += "/index.html";
   }
 
   const file = await Deno.open(filepath, { read: true });
   return file;
-}
-
-const port = Deno.args[0] ?? 3000;
-
-const server = Deno.listen({ port: Number(port) });
-console.log(`Dev server running on port ${port}`);
-
-for await (const conn of server) {
-  handleHttp(conn).catch(console.error);
 }
