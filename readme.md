@@ -1,1 +1,3 @@
-## Simple dev server utility
+## HTML dev server
+
+A simple server that refreshes page upon file change
