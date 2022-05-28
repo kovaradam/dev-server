@@ -1,0 +1,12 @@
+<script>
+  const intervalId = setInterval(async () => {
+    const response = await fetch("/poll").catch((reason) => {
+      clearInterval(intervalId);
+      throw new Error("Dev server is unreachable");
+    });
+
+    if (response?.status === 205) {
+      window.location.reload();
+    }
+  }, 1000);
+</script>

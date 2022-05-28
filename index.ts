@@ -1,11 +1,37 @@
 import { mergeReadableStreams } from "https://deno.land/std@0.126.0/streams/merge.ts";
 
+const fsWatcherStore = {
+  _isDirty: false,
+  getIsDirty() {
+    const prevState = this._isDirty;
+    this._isDirty = false;
+    return prevState;
+  },
+  update() {
+    this._isDirty = true;
+  },
+};
+
+(async () => {
+  const watcher = Deno.watchFs("./");
+  for await (const event of watcher) {
+    console.info(`${event.kind.toUpperCase()}: ${event.paths}`);
+    fsWatcherStore.update();
+  }
+})();
+
 async function handleHttp(connection: Deno.Conn) {
   const httpConnection = Deno.serveHttp(connection);
   for await (const requestEvent of httpConnection) {
     // Use the request pathname as filepath
     const url = new URL(requestEvent.request.url);
     const filepath = decodeURIComponent(url.pathname);
+
+    if (filepath === "/poll") {
+      const status = [204, 205][+fsWatcherStore.getIsDirty()];
+      await requestEvent.respondWith(new Response(null, { status }));
+      continue;
+    }
 
     // Try opening the file
     let file;
@@ -18,14 +44,16 @@ async function handleHttp(connection: Deno.Conn) {
       return;
     }
 
-    const response = new Response(createResponseStream(file, INJECT_SCRIPT));
+    const response = new Response(
+      createFileResponseStream(file, INJECT_SCRIPT)
+    );
     await requestEvent.respondWith(response);
   }
 }
 
-const INJECT_SCRIPT = "<script>console.log('world!')</script>";
+const INJECT_SCRIPT = Deno.readTextFileSync("./client-script.html");
 
-function createResponseStream(file: Deno.FsFile, htmlSlice: string) {
+function createFileResponseStream(file: Deno.FsFile, htmlSlice: string) {
   const textEncoderStream = new TextEncoderStream();
   const textWriter = textEncoderStream.writable.getWriter();
 
