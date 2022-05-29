@@ -62,13 +62,13 @@ async function handleHttp(connection: Deno.Conn) {
     } catch {
       const notFoundResponse = new Response('404 Not Found', { status: 404 });
       await requestEvent.respondWith(notFoundResponse);
-      return;
+      continue;
     }
 
-    const response = new Response(
+    const fileResponse = new Response(
       createFileResponseStream(file, INJECT_SCRIPT),
     );
-    await requestEvent.respondWith(response);
+    await requestEvent.respondWith(fileResponse);
   }
 }
 
