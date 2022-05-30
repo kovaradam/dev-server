@@ -28,12 +28,16 @@ export function createArgumentMap() {
   return argumentMap;
 }
 
-export function log(input: Parameters<typeof console.log>[number]) {
+export function log(...input: Parameters<typeof console.log>) {
   console.log(input);
 }
 
-log.info = (input: Parameters<typeof console.info>[number]) => {
+log.info = (...input: Parameters<typeof console.info>) => {
   console.info(`${Colors.gray('>')} ${input}`);
+};
+
+log.error = (...input: Parameters<typeof console.error>) => {
+  console.error(`${Colors.red('!')} ${input}`);
 };
 
 log.Colors = Colors;
@@ -57,21 +61,20 @@ log.fsEvent = (event: Deno.FsEvent) => {
 };
 
 log.help = () => {
-  console.table([
-    {
-      argument: '-p',
-      description: 'define port for server to listen to, default is 3000',
-    },
-    {
-      argument: '-d',
-      description:
-        'specify directory to be watched for changes, default is current directory',
-    },
-    {
-      argument: '-h',
-      description: 'show help',
-    },
-  ]);
+  console.log('USAGE:');
+  console.group();
+  console.log('html-dev [OPTIONS]\n');
+  console.groupEnd();
+
+  console.log('OPTIONS:');
+  console.group();
+  console.log(
+    '-p: define port for server to listen to, default is 3000',
+  );
+  console.log(
+    '-d: specify directory to be watched for changes, default is current directory',
+  );
+  console.log('-h: show help\n');
 };
 
 // Enable syntax highlighting with bierner.lit-html extension, return input as is
