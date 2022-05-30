@@ -75,4 +75,12 @@ log.help = () => {
 };
 
 // Enable syntax highlighting with bierner.lit-html extension, return input as is
-export const html = (value: TemplateStringsArray) => value[0];
+export const html = (
+  stringSlices: TemplateStringsArray,
+  ...interpolations: unknown[]
+) => {
+  return stringSlices.reduce((prev, current, index) => {
+    const expression = interpolations[index] ?? '';
+    return `${prev}${current}${expression}`;
+  }, '');
+};

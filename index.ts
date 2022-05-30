@@ -1,8 +1,13 @@
 import { mergeReadableStreams } from 'https://deno.land/std@0.126.0/streams/merge.ts';
 import { createArgumentMap, html, log } from './utils.ts';
+import {
+  WebSocketClient,
+  WebSocketServer,
+} from 'https://deno.land/x/websocket@v0.1.4/mod.ts';
 
 const args = createArgumentMap();
 const PORT = args['-p'] ?? 3000;
+const [SOCKET_PORT, REFRESH_MESSAGE] = [Number(PORT) + 1, 'refresh'];
 const SUBDIRECTORY = args['-d'] ?? '';
 
 if (args['-h']) {
@@ -19,15 +24,31 @@ const server = Deno.listen({ port: Number(PORT) });
   }
 })();
 
-const fsWatcherStore = {
-  _isDirty: false,
-  getIsDirty() {
-    const prevState = this._isDirty;
-    this._isDirty = false;
-    return prevState;
+const webSocket = new WebSocketServer(SOCKET_PORT);
+
+webSocket.on('connection', function (ws: WebSocketClient) {
+  const unsub = store.addNotifier(() => ws.send(REFRESH_MESSAGE));
+  ws.on('close', unsub);
+});
+
+const store = {
+  _debounceId: null as number | null,
+  _notifiers: [] as (() => void)[],
+  addNotifier(newNotifier: () => void) {
+    this._notifiers.push(newNotifier);
+    return () => {
+      this._notifiers = this._notifiers.filter((notifier) =>
+        notifier !== newNotifier
+      );
+    };
   },
-  update() {
-    this._isDirty = true;
+  notify() {
+    if (this._debounceId) {
+      clearTimeout(this._debounceId);
+    }
+    this._debounceId = setTimeout(() =>
+      this._notifiers.forEach((notify) => notify())
+    );
   },
 };
 
@@ -39,7 +60,7 @@ const fsWatcherStore = {
 
   for await (const event of watcher) {
     log.fsEvent(event);
-    fsWatcherStore.update();
+    store.notify();
   }
 })();
 
@@ -49,12 +70,6 @@ async function handleHttp(connection: Deno.Conn) {
     // Use the request pathname as filepath
     const url = new URL(requestEvent.request.url);
     const filepath = decodeURIComponent(url.pathname);
-
-    if (filepath === '/poll') {
-      const status = [204, 205][+fsWatcherStore.getIsDirty()];
-      await requestEvent.respondWith(new Response(null, { status }));
-      continue;
-    }
 
     let file;
     try {
@@ -71,21 +86,6 @@ async function handleHttp(connection: Deno.Conn) {
     await requestEvent.respondWith(fileResponse);
   }
 }
-
-const INJECT_SCRIPT = html`
-  <script>
-    const intervalId = setInterval(async () => {
-      const response = await fetch("/poll").catch((reason) => {
-        clearInterval(intervalId);
-        throw new Error("Dev server is unreachable");
-      });
-
-      if (response?.status === 205) {
-        window.location.reload();
-      }
-    }, 1000);
-  </script>
-`;
 
 function createFileResponseStream(file: Deno.FsFile, htmlSlice: string) {
   const textEncoderStream = new TextEncoderStream();
@@ -108,3 +108,35 @@ async function readFile(filepath: string): Promise<Deno.FsFile> {
   const file = await Deno.open(filepath, { read: true });
   return file;
 }
+
+const INJECT_SCRIPT = html`
+  <script>
+    function connectSocket(intervalId) {
+      let socket
+      try {
+        socket = new WebSocket('ws://localhost:${SOCKET_PORT}')
+        clearInterval(intervalId)
+      } catch (_) {
+        return
+      }
+      
+      // Listen for messages
+      const onMessage = (event) => {
+        if(event.data === '${REFRESH_MESSAGE}'){
+          window.location.reload();
+        }
+      }
+      socket.addEventListener('message', onMessage);
+
+      const onClose = () => {
+        socket.removeEventListener('close', onClose);
+        socket.removeEventListener('message', onClose);
+        const intervalId = setInterval(() => connectSocket(intervalId), 1000);
+
+      }
+      socket.addEventListener('close', onClose)
+    }
+
+    connectSocket()
+  </script>
+`;
