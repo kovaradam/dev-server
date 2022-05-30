@@ -120,7 +120,6 @@ const INJECT_SCRIPT = html`
         return
       }
       
-      // Listen for messages
       const onMessage = (event) => {
         if(event.data === '${REFRESH_MESSAGE}'){
           window.location.reload();
@@ -130,7 +129,7 @@ const INJECT_SCRIPT = html`
 
       const onClose = () => {
         socket.removeEventListener('close', onClose);
-        socket.removeEventListener('message', onClose);
+        socket.removeEventListener('message', onMessage);
         const intervalId = setInterval(() => connectSocket(intervalId), 1000);
 
       }
