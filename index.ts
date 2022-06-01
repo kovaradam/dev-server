@@ -55,17 +55,6 @@ async function handler(request: Request) {
   return fileResponse;
 }
 
-function createFileResponseStream(file: Deno.FsFile, htmlSlice: string) {
-  const textEncoderStream = new TextEncoderStream();
-  const textWriter = textEncoderStream.writable.getWriter();
-
-  textWriter.ready
-    .then(() => textWriter.write(htmlSlice))
-    .then(() => textWriter.close());
-
-  return mergeReadableStreams(textEncoderStream.readable, file.readable);
-}
-
 async function readFile(filepath: string): Promise<[Deno.FsFile, string]> {
   const stat = await Deno.stat(filepath);
   if (stat.isDirectory) {
@@ -74,6 +63,20 @@ async function readFile(filepath: string): Promise<[Deno.FsFile, string]> {
 
   const file = await Deno.open(filepath, { read: true });
   return [file, filepath];
+}
+
+function createFileResponseStream(
+  file: Deno.FsFile,
+  htmlSlice: string,
+): ReadableStream<Uint8Array> {
+  const textEncoderStream = new TextEncoderStream();
+  const textWriter = textEncoderStream.writable.getWriter();
+
+  textWriter.ready
+    .then(() => textWriter.write(htmlSlice))
+    .then(() => textWriter.close());
+
+  return mergeReadableStreams(textEncoderStream.readable, file.readable);
 }
 
 const INJECT_SCRIPT = html`
