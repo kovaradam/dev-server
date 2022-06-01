@@ -4,6 +4,7 @@ import {
   WebSocketClient,
   WebSocketServer,
 } from 'https://deno.land/x/websocket@v0.1.4/mod.ts';
+import { serve } from 'https://deno.land/std@0.141.0/http/server.ts';
 
 const args = createArgumentMap();
 const PORT = args['-p'] ?? 3000;
@@ -15,14 +16,12 @@ if (args['-h']) {
   Deno.exit(0);
 }
 
-const server = Deno.listen({ port: Number(PORT) });
-
-(async () => {
-  log.info(`Running on port ${log.Colors.bold(String(PORT))}`);
-  for await (const conn of server) {
-    handleHttp(conn).catch(console.error);
-  }
-})();
+serve(handler, {
+  port: Number(PORT),
+  onListen() {
+    log.info(`Running on port ${log.Colors.bold(String(PORT))}`);
+  },
+});
 
 const webSocket = new WebSocketServer(SOCKET_PORT);
 
@@ -64,27 +63,27 @@ const store = {
   }
 })();
 
-async function handleHttp(connection: Deno.Conn) {
-  const httpConnection = Deno.serveHttp(connection);
-  for await (const requestEvent of httpConnection) {
-    // Use the request pathname as filepath
-    const url = new URL(requestEvent.request.url);
-    const filepath = decodeURIComponent(url.pathname);
+async function handler(request: Request) {
+  const url = new URL(request.url);
+  const filepath = decodeURIComponent(url.pathname);
 
-    let file;
-    try {
-      file = await readFile(`.${filepath}`);
-    } catch {
-      const notFoundResponse = new Response('404 Not Found', { status: 404 });
-      await requestEvent.respondWith(notFoundResponse);
-      continue;
-    }
-
-    const fileResponse = new Response(
-      createFileResponseStream(file, INJECT_SCRIPT),
-    );
-    await requestEvent.respondWith(fileResponse);
+  let file, filename;
+  try {
+    [file, filename] = await readFile(`./${SUBDIRECTORY}${filepath}`);
+  } catch {
+    const notFoundResponse = new Response('404 Not Found', { status: 404 });
+    return notFoundResponse;
   }
+
+  let fileStream;
+  if (filename.endsWith('.html')) {
+    fileStream = createFileResponseStream(file, INJECT_SCRIPT);
+  } else {
+    fileStream = file.readable;
+  }
+
+  const fileResponse = new Response(fileStream);
+  return fileResponse;
 }
 
 function createFileResponseStream(file: Deno.FsFile, htmlSlice: string) {
@@ -98,39 +97,36 @@ function createFileResponseStream(file: Deno.FsFile, htmlSlice: string) {
   return mergeReadableStreams(textEncoderStream.readable, file.readable);
 }
 
-async function readFile(filepath: string): Promise<Deno.FsFile> {
+async function readFile(filepath: string): Promise<[Deno.FsFile, string]> {
   const stat = await Deno.stat(filepath);
-
   if (stat.isDirectory) {
     filepath += '/index.html';
   }
 
   const file = await Deno.open(filepath, { read: true });
-  return file;
+  return [file, filepath];
 }
 
 const INJECT_SCRIPT = html`
   <script>
-    function connectSocket(intervalId) {
-      let socket
-      try {
-        socket = new WebSocket('ws://localhost:${SOCKET_PORT}')
-        clearInterval(intervalId)
-      } catch (_) {
-        return
-      }
+    function connectSocket(timeoutId, onOpen) {
+      const socket = new WebSocket('ws://localhost:${SOCKET_PORT}')
+      clearInterval(timeoutId)
       
+      socket.addEventListener('open', onOpen)
+
       const onMessage = (event) => {
         if(event.data === '${REFRESH_MESSAGE}'){
           window.location.reload();
         }
       }
+
       socket.addEventListener('message', onMessage);
 
       const onClose = () => {
-        socket.removeEventListener('close', onClose);
-        socket.removeEventListener('message', onMessage);
-        const intervalId = setInterval(() => connectSocket(intervalId), 1000);
+        const timeoutId = setTimeout(() => {
+          connectSocket(timeoutId, () => window.location.reload())
+        }, 1000);
 
       }
       socket.addEventListener('close', onClose)
