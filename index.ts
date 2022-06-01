@@ -8,6 +8,7 @@ import { serve } from 'https://deno.land/std@0.141.0/http/server.ts';
 
 const args = createArgumentMap();
 const PORT = args['-p'] ?? 3000;
+const HOSTNAME = args['--host'] ?? '0.0.0.0';
 const [SOCKET_PORT, REFRESH_MESSAGE] = [Number(PORT) + 1, 'refresh'];
 const DIR_TO_WATCH = args['-d'] ?? '';
 
@@ -18,6 +19,7 @@ if (args['-h']) {
 
 serve(handler, {
   port: Number(PORT),
+  hostname: HOSTNAME,
   onListen({ hostname, port }) {
     console.clear();
     log.info(
@@ -77,7 +79,7 @@ async function readFile(filepath: string): Promise<[Deno.FsFile, string]> {
 const INJECT_SCRIPT = html`
   <script>
     function connectSocket(timeoutId, onOpen) {
-      const socket = new WebSocket('ws://localhost:${SOCKET_PORT}')
+      const socket = new WebSocket('ws://${HOSTNAME}:${SOCKET_PORT}')
       clearInterval(timeoutId)
       
       socket.addEventListener('open', onOpen)

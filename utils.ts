@@ -1,18 +1,20 @@
 import * as Colors from 'https://deno.land/std@0.141.0/fmt/colors.ts';
 
+const flags = ['-p', '-d', '-h', '--host'] as const;
+type ArgType = typeof flags[number];
+
 export function createArgumentMap() {
-  const flags = ['-p', '-d', '-h'] as const;
   function isValidFlag(flag: string): flag is typeof flags[number] {
-    return flags.includes(flag as typeof flags[number]);
+    return flags.includes(flag as ArgType);
   }
 
   const argumentMap = Object.fromEntries(
     flags.map((flag) => [flag, undefined]),
-  ) as Record<typeof flags[number], unknown | undefined>;
+  ) as Record<typeof flags[number], string | undefined>;
 
   Deno.args.forEach((argument, index, array) => {
     if (argument === '-h') {
-      argumentMap[argument] = true;
+      argumentMap[argument] = 'true';
       return;
     }
 
@@ -61,20 +63,25 @@ log.fsEvent = (event: Deno.FsEvent) => {
 };
 
 log.help = () => {
-  console.log('USAGE:');
+  const descriptions: Record<ArgType, string> = {
+    '-p': 'define port for server to listen to, default is 3000',
+    '--host': 'define server hostname, defaults to 0.0.0.0',
+    '-d':
+      'specify directory to be watched for changes, default is current directory',
+    '-h': 'show help\n',
+  };
+
+  console.log('\nUSAGE:');
   console.group();
   console.log('html-dev [OPTIONS]\n');
   console.groupEnd();
 
   console.log('OPTIONS:');
   console.group();
-  console.log(
-    '-p: define port for server to listen to, default is 3000',
+  Object.entries(descriptions).forEach(([flag, description]) =>
+    console.log(`${flag}: ${description}`)
   );
-  console.log(
-    '-d: specify directory to be watched for changes, default is current directory',
-  );
-  console.log('-h: show help\n');
+  console.groupEnd();
 };
 
 // Enable syntax highlighting with bierner.lit-html extension, return input as is
